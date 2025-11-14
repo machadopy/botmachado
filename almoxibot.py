@@ -5,20 +5,12 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 
-
-from dotenv import load_dotenv
-import os
-
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DB_PATH = os.getenv("DB_PATH")
 IMAGES_PATH = os.getenv("IMAGES_PATH")
 
-
-# =====================================================
-# CONFIGURAÇÃO DO BOT
-# =====================================================
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # =====================================================
@@ -29,12 +21,11 @@ button = KeyboardButton(text="Logar informações", request_contact=True)
 keyboard.add(button)
 
 # =====================================================
-# BANCO DE DADOS - CRIAÇÃO DAS TABELAS
+# BANCO DE DADOS
 # =====================================================
-with sqlite3.connect('user.db') as connection:
+with sqlite3.connect(DB_PATH) as connection:
     cursor = connection.cursor()
 
-    # Usuários
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users(
             id INTEGER PRIMARY KEY,
@@ -44,7 +35,6 @@ with sqlite3.connect('user.db') as connection:
         );
     """)
 
-    # Registros
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS registros(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,7 +46,6 @@ with sqlite3.connect('user.db') as connection:
         );
     """)
 
-    # Imagens
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS imagens(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,7 +57,7 @@ with sqlite3.connect('user.db') as connection:
     """)
 
 # =====================================================
-# FUNÇÕES DE LOGIN E MENU
+# LOGIN
 # =====================================================
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -82,7 +71,7 @@ def send_welcome(message):
 
 @bot.message_handler(content_types=['contact'])
 def contact(message):
-    with sqlite3.connect('user.db') as connection:
+    with sqlite3.connect(DB_PATH) as connection:
         cursor = connection.cursor()
 
         cursor.execute("""
@@ -101,6 +90,9 @@ def contact(message):
     )
     start(message)
 
+# =====================================================
+# MENU
+# =====================================================
 @bot.message_handler(commands=['start', 'menu'])
 def start(msg: telebot.types.Message):
     markup = telebot.types.InlineKeyboardMarkup()
@@ -108,12 +100,8 @@ def start(msg: telebot.types.Message):
         telebot.types.InlineKeyboardButton('➕ Adicionar Histórico', callback_data='botaoadicionar'),
         telebot.types.InlineKeyboardButton('📦 Consultar Almox', callback_data='botaoconsultar')
     )
-
     bot.send_message(msg.chat.id, 'O que deseja fazer?', reply_markup=markup)
 
-# =====================================================
-# CALLBACKS DO MENU
-# =====================================================
 @bot.callback_query_handler()
 def resp_btn(call: telebot.types.CallbackQuery):
     match call.data:
@@ -127,7 +115,7 @@ def resp_btn(call: telebot.types.CallbackQuery):
             escolher_tipo_consulta(call.message)
 
 # =====================================================
-# ETAPA 1 - ORDEM DE SERVIÇO
+# ETAPA 1 - O.S.
 # =====================================================
 def get_ordem_servico(message):
     os_number = message.text.strip()
@@ -136,7 +124,7 @@ def get_ordem_servico(message):
     bot.register_next_step_handler(msg, get_serial_ont)
 
 # =====================================================
-# ETAPA 2 - SERIAL DA ONT
+# ETAPA 2 - SERIAL
 # =====================================================
 def get_serial_ont(message):
     chat_id = message.chat.id
@@ -146,35 +134,34 @@ def get_serial_ont(message):
 
     msg = bot.send_message(
         chat_id,
-        "📸 Agora envie até *2 fotos* relacionadas à O.S.\n"
+        "📸 Agora envie a *1° foto* relacionadas à O.S.\n"
         "Ou digite /pular se não quiser enviar imagens.",
         parse_mode="Markdown"
     )
     bot.register_next_step_handler(msg, receber_imagem_ou_pular)
 
 # =====================================================
-# ETAPA 3 - RECEBER IMAGENS
+# ETAPA 3 - RECEBER IMAGENS (CORRIGIDO)
 # =====================================================
-if not os.path.exists("images"):
-    os.makedirs("images")
 
-@bot.message_handler(commands=['pular'])
-def pular_envio(message):
-    finalizar_registro(message.chat.id)
+# ⛔ Removido o handler global que causava duplicação
+# ❗ Agora é APENAS uma função comum chamada pelo next_step_handler
 
-@bot.message_handler(content_types=['photo', 'text'])
 def receber_imagem_ou_pular(message):
     chat_id = message.chat.id
 
     if chat_id not in bot.user_data:
         return
 
+    # Usuário enviou foto
     if message.content_type == 'photo':
         file_id = message.photo[-1].file_id
         file_info = bot.get_file(file_id)
         downloaded_file = bot.download_file(file_info.file_path)
-        filename = f"{chat_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-        path = os.path.join("images", filename)
+
+        # Nome único com microssegundos
+        filename = f"{chat_id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.jpg"
+        path = os.path.join(IMAGES_PATH, filename)
 
         with open(path, 'wb') as new_file:
             new_file.write(downloaded_file)
@@ -188,8 +175,10 @@ def receber_imagem_ou_pular(message):
         else:
             bot.send_message(chat_id, "📁 Duas imagens recebidas! Salvando registro...")
             finalizar_registro(chat_id)
+
     elif message.text.lower() == '/pular':
         finalizar_registro(chat_id)
+
     else:
         bot.send_message(chat_id, "Envie uma foto válida ou digite /pular para continuar.")
         bot.register_next_step_handler(message, receber_imagem_ou_pular)
@@ -209,7 +198,7 @@ def finalizar_registro(chat_id):
         imagens = dados.get('images', [])
         data_atual = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-        with sqlite3.connect('user.db') as connection:
+        with sqlite3.connect(DB_PATH) as connection:
             cursor = connection.cursor()
             cursor.execute("""
                 INSERT INTO registros (user_id, ordem_servico, serial_ont, data_registro)
@@ -238,7 +227,7 @@ def finalizar_registro(chat_id):
         bot.send_message(chat_id, f"❌ Erro ao salvar registro: {e}")
 
 # =====================================================
-# CONSULTAS (SA, SERIAL OU TODOS)
+# CONSULTA
 # =====================================================
 def escolher_tipo_consulta(message):
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
@@ -277,7 +266,7 @@ def consultar_registros(chat_id, tipo="todos", valor=None):
 
         query += " ORDER BY id DESC LIMIT 10"
 
-        with sqlite3.connect('user.db') as connection:
+        with sqlite3.connect(DB_PATH) as connection:
             cursor = connection.cursor()
             cursor.execute(query, params)
             registros = cursor.fetchall()
@@ -299,8 +288,7 @@ def consultar_registros(chat_id, tipo="todos", valor=None):
                 parse_mode="Markdown"
             )
 
-            # Envia imagens associadas
-            with sqlite3.connect('user.db') as connection:
+            with sqlite3.connect(DB_PATH) as connection:
                 cursor = connection.cursor()
                 cursor.execute("SELECT caminho FROM imagens WHERE registro_id = ?", (reg_id,))
                 imagens = cursor.fetchall()
@@ -317,7 +305,7 @@ def consultar_registros(chat_id, tipo="todos", valor=None):
         bot.send_message(chat_id, f"❌ Erro ao consultar registros: {e}")
 
 # =====================================================
-# EXECUÇÃO DO BOT
+# EXECUÇÃO
 # =====================================================
 if not hasattr(bot, 'user_data'):
     bot.user_data = {}
