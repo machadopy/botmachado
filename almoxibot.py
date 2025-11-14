@@ -5,13 +5,21 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 
+
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-DB_PATH = os.getenv("DB_PATH")
-IMAGES_PATH = os.getenv("IMAGES_PATH")
+DB_PATH = os.getenv("DB_PATH", "./user.db")
+IMAGES_PATH = os.getenv("IMAGES_PATH", "./images")
 
 bot = telebot.TeleBot(BOT_TOKEN)
+
+
+# Cria pastas se não existirem
+os.makedirs(IMAGES_PATH, exist_ok=True)
+db_dir = os.path.dirname(DB_PATH)
+if db_dir:
+    os.makedirs(db_dir, exist_ok=True)
 
 # =====================================================
 # TECLADO INICIAL
