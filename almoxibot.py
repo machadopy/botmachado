@@ -9,8 +9,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-DB_PATH = os.getenv("DB_PATH", "./user.db")
-IMAGES_PATH = os.getenv("IMAGES_PATH", "./images")
+DB_PATH = os.getenv("DB_PATH")
+IMAGES_PATH = os.getenv("IMAGES_PATH")
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
